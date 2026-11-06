@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Τα Ταξίδια μου</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0e7c86">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ταξίδια μου">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root{--bg:#f6f4ef;--card:#fff;--ink:#1f2a37;--muted:#6b7280;--accent:#0e7c86;--accent2:#e4572e;--line:#e5e1d8}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+  header{background:var(--accent);color:#fff;padding:12px 16px 0;position:sticky;top:0;z-index:1000}
+  header h1{margin:0 0 6px;font-size:20px}
+  .stats{font-size:13px;opacity:.9;margin-bottom:8px}
+  nav{display:flex;gap:4px;overflow-x:auto}
+  nav button{background:none;border:0;color:#d7f1f3;padding:10px 14px;font-size:15px;cursor:pointer;border-radius:8px 8px 0 0;white-space:nowrap}
+  nav button.active{background:var(--bg);color:var(--ink);font-weight:600}
+  main{max-width:900px;margin:0 auto;padding:16px}
+  section{display:none} section.active{display:block}
+  #map{height:62vh;border-radius:12px;border:1px solid var(--line)}
+  .row{display:flex;gap:8px;margin-bottom:10px}
+  input[type=text],textarea{flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:15px;font-family:inherit;background:#fff}
+  textarea{width:100%;min-height:60px;resize:vertical}
+  .btn{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:9px 14px;font-size:14px;cursor:pointer}
+  .btn.sec{background:#fff;color:var(--accent);border:1px solid var(--accent)}
+  .btn.small{padding:4px 10px;font-size:13px}
+  .x{background:none;border:0;color:#b91c1c;cursor:pointer;font-size:16px;padding:0 4px}
+  .results{background:#fff;border:1px solid var(--line);border-radius:8px;margin-bottom:10px;max-height:300px;overflow:auto}
+  .results div{padding:9px 12px;border-bottom:1px solid var(--line);cursor:pointer;font-size:14px}
+  .results div:hover{background:#eef8f9}
+  .results small{color:var(--muted)}
+  .hint{color:var(--muted);font-size:13px;margin:6px 0 12px}
+  .country{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin-bottom:12px}
+  .country h2{margin:0;font-size:19px;display:flex;align-items:center;gap:10px}
+  .country h2 img{width:32px;border-radius:3px;box-shadow:0 0 0 1px #0002}
+  .country h2 .cnt{margin-left:auto;font-size:13px;color:var(--muted);font-weight:400}
+  .city{margin:10px 0 0 6px}
+  .city>.ct{font-weight:600;display:flex;align-items:center;gap:6px}
+  .lbl{color:var(--accent);font-weight:700;min-width:24px}
+  .attr{margin:4px 0 0 34px;display:flex;align-items:center;gap:6px}
+  .attr .lbl{color:var(--accent2);min-width:20px}
+  .note{background:#fff8e6;border-left:3px solid #f2b705;padding:6px 10px;margin:6px 0 0 34px;border-radius:4px;font-size:14px;white-space:pre-wrap}
+  .note .d{color:var(--muted);font-size:12px;display:flex;justify-content:space-between}
+  .addnote{margin:6px 0 4px 34px;display:none}
+  .empty{text-align:center;color:var(--muted);padding:40px 10px}
+  .modal-bg{position:fixed;inset:0;background:#0006;display:none;align-items:center;justify-content:center;z-index:2000}
+  .modal{background:#fff;border-radius:12px;padding:16px;width:min(560px,94vw);max-height:86vh;overflow:auto}
+  .modal h3{margin-top:0}
+  .tools{display:flex;gap:8px;justify-content:flex-end;margin-top:24px}
+  nav button .t{display:inline}
+  /* ---- Κινητό ---- */
+  @media (max-width:700px){
+    header{padding:calc(8px + env(safe-area-inset-top)) 14px 8px}
+    header h1{font-size:18px;margin:0}
+    .stats{margin:2px 0 0;font-size:12px}
+    nav{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);
+        padding:4px 2px calc(4px + env(safe-area-inset-bottom));justify-content:space-around;gap:0;z-index:1500;box-shadow:0 -2px 10px #0001}
+    nav button{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 2px;font-size:20px;color:var(--muted);border-radius:8px;flex:1;min-width:0}
+    nav button .t{font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+    nav button.active{background:#e6f4f5;color:var(--accent)}
+    main{padding:12px 10px calc(84px + env(safe-area-inset-bottom))}
+    #map{height:calc(100vh - 270px);min-height:300px}
+    input[type=text],textarea{font-size:16px}
+    .country{padding:10px 12px}
+    .country h2{font-size:17px}
+    .attr{margin-left:22px}
+    .note,.addnote{margin-left:22px}
+    .x{font-size:20px;padding:4px 8px}
+    .btn.small{padding:7px 12px}
+    .modal-bg{align-items:flex-end}
+    .modal{width:100vw;border-radius:16px 16px 0 0;max-height:88vh;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>🌍 Τα Ταξίδια μου</h1>
+  <div class="stats" id="stats"></div>
+  <nav>
+    <button data-p="map" class="active">📍 <span class="t">Χάρτης</span></button>
+    <button data-p="airports">✈️ <span class="t">Αεροδρόμια</span></button>
+    <button data-p="countries">🏳️ <span class="t">Χώρες</span></button>
+    <button data-p="attractions">🏛️ <span class="t">Αξιοθέατα</span></button>
+    <button data-p="notes">📝 <span class="t">Εντυπώσεις</span></button>
+  </nav>
+</header>
+
+<main>
+  <section id="p-map" class="active">
+    <div class="row">
+      <input type="text" id="placeQ" placeholder="Αναζήτηση πόλης, χωριού, νησιού… (π.χ. Οία, Φλωρεντία)">
+      <button class="btn" id="placeGo">Αναζήτηση</button>
+    </div>
+    <div class="results" id="placeRes" hidden></div>
+    <div class="hint">Ή κάνε κλικ οπουδήποτε στον χάρτη για να βάλεις πινέζα στο πιο κοντινό μέρος.</div>
+    <div id="map"></div>
+  </section>
+
+  <section id="p-airports">
+    <div class="row">
+      <input type="text" id="apQ" placeholder="Κωδικός (ATH), πόλη ή όνομα αεροδρομίου">
+    </div>
+    <div class="results" id="apRes" hidden></div>
+    <div id="apList"></div>
+  </section>
+
+  <section id="p-countries"><div id="cList"></div></section>
+  <section id="p-attractions"><div id="aList"></div></section>
+  <section id="p-notes"><div id="nList"></div></section>
+
+  <div class="tools">
+    <button class="btn sec small" id="exp">⬇️ Αντίγραφο ασφαλείας</button>
+    <label class="btn sec small">⬆️ Επαναφορά<input type="file" id="imp" accept=".json" hidden></label>
+  </div>
+</main>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
+
+<script>
+// ---------- Δεδομένα ----------
+const KEY = 'travel-app-v1';
+let db = JSON.parse(localStorage.getItem(KEY) || 'null') || {places:[], attractions:[], airports:[], notes:[]};
+const save = () => { localStorage.setItem(KEY, JSON.stringify(db)); renderAll(); };
+const uid = () => Math.random().toString(36).slice(2, 10);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const regionName = new Intl.DisplayNames(['el'], {type:'region'});
+const countryName = cc => { try { return regionName.of(cc.toUpperCase()); } catch { return cc.toUpperCase(); } };
+const flag = cc => `<img src="https://flagcdn.com/w80/${cc.toLowerCase()}.png" alt="">`;
+const GR = 'αβγδεζηθικλμνξοπρστυφχψω';
+const grLetter = i => (i >= GR.length ? GR[Math.floor(i / GR.length) - 1] : '') + GR[i % GR.length];
+
+// ---------- Πλοήγηση ----------
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active', x === b));
+  document.querySelectorAll('section').forEach(s => s.classList.toggle('active', s.id === 'p-' + b.dataset.p));
+  if (b.dataset.p === 'map') setTimeout(() => map.invalidateSize(), 50);
+  if (b.dataset.p === 'airports') loadAirports();
+});
+
+// ---------- Χάρτης ----------
+const map = L.map('map', {worldCopyJump:true}).setView([38, 15], 3);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:18, attribution:'© OpenStreetMap'}).addTo(map);
+const layer = L.layerGroup().addTo(map);
+
+function renderMap() {
+  layer.clearLayers();
+  db.places.forEach(p => {
+    L.marker([p.lat, p.lon]).addTo(layer)
+      .bindPopup(`<b>${esc(p.name)}</b><br>${esc(countryName(p.cc))}<br><button class="btn small" onclick="removePlace('${p.id}')">Αφαίρεση</button>`);
+  });
+  db.airports.forEach(a => {
+    L.circleMarker([a.lat, a.lon], {radius:6, color:'#e4572e', fillOpacity:.8}).addTo(layer)
+      .bindPopup(`✈️ <b>${esc(a.iata)}</b> ${esc(a.name)}`);
+  });
+}
+
+const NOM = 'https://nominatim.openstreetmap.org';
+async function nominatim(path) {
+  const r = await fetch(`${NOM}/${path}&format=jsonv2&addressdetails=1&accept-language=el`);
+  return r.json();
+}
+function toPlace(r) {
+  return {
+    id: uid(),
+    name: r.name || (r.display_name || '').split(',')[0],
+    lat: +r.lat, lon: +r.lon,
+    cc: (r.address?.country_code || '').toLowerCase(),
+    added: new Date().toISOString()
+  };
+}
+function addPlace(p) {
+  if (!p.cc) return alert('Δεν βρέθηκε χώρα για αυτό το σημείο.');
+  if (db.places.some(x => x.name === p.name && x.cc === p.cc)) return alert(`Το «${p.name}» υπάρχει ήδη.`);
+  db.places.push(p); save();
+  map.setView([p.lat, p.lon], Math.max(map.getZoom(), 6));
+}
+function removePlace(id) {
+  const p = db.places.find(x => x.id === id);
+  if (!confirm(`Αφαίρεση «${p.name}» μαζί με τα αξιοθέατα και τις εντυπώσεις του;`)) return;
+  const aIds = db.attractions.filter(a => a.placeId === id).map(a => a.id);
+  db.notes = db.notes.filter(n => n.targetId !== id && !aIds.includes(n.targetId));
+  db.attractions = db.attractions.filter(a => a.placeId !== id);
+  db.places = db.places.filter(x => x.id !== id);
+  map.closePopup(); save();
+}
+
+let lastResults = [];
+async function searchPlaces() {
+  const q = placeQ.value.trim(); if (!q) return;
+  placeRes.hidden = false; placeRes.innerHTML = '<div>Αναζήτηση…</div>';
+  try {
+    lastResults = (await nominatim(`search?q=${encodeURIComponent(q)}&limit=8`)).filter(r => r.address?.country_code);
+    placeRes.innerHTML = lastResults.length
+      ? lastResults.map((r, i) => `<div data-i="${i}">${esc(r.name || r.display_name.split(',')[0])}<br><small>${esc(r.display_name)}</small></div>`).join('')
+      : '<div>Δεν βρέθηκαν αποτελέσματα</div>';
+  } catch { placeRes.innerHTML = '<div>Σφάλμα σύνδεσης</div>'; }
+}
+placeGo.onclick = searchPlaces;
+placeQ.onkeydown = e => { if (e.key === 'Enter') searchPlaces(); };
+placeRes.onclick = e => {
+  const d = e.target.closest('[data-i]'); if (!d) return;
+  addPlace(toPlace(lastResults[d.dataset.i]));
+  placeRes.hidden = true; placeQ.value = '';
+};
+map.on('click', async e => {
+  try {
+    const r = await nominatim(`reverse?lat=${e.latlng.lat}&lon=${e.latlng.lng}&zoom=14`);
+    if (!r || r.error) return;
+    const a = r.address || {};
+    const name = a.village || a.town || a.city || a.hamlet || a.suburb || a.municipality || r.name;
+    if (confirm(`Προσθήκη «${name}» (${countryName(a.country_code || '')});`))
+      addPlace({...toPlace(r), name, lat: e.latlng.lat, lon: e.latlng.lng});
+  } catch { alert('Σφάλμα σύνδεσης'); }
+});
+
+// ---------- Αεροδρόμια ----------
+let AIRPORTS = null;
+async function loadAirports() {
+  if (AIRPORTS) return;
+  apRes.hidden = false; apRes.innerHTML = '<div>Φόρτωση λίστας αεροδρομίων…</div>';
+  try {
+    const data = await (await fetch('https://raw.githubusercontent.com/mwgg/Airports/master/airports.json')).json();
+    AIRPORTS = Object.values(data).filter(a => a.iata);
+    apRes.hidden = true;
+  } catch { apRes.innerHTML = '<div>Δεν ήταν δυνατή η φόρτωση των αεροδρομίων</div>'; }
+}
+apQ.oninput = () => {
+  const q = apQ.value.trim().toLowerCase();
+  if (!AIRPORTS || q.length < 2) { apRes.hidden = true; return; }
+  const hits = AIRPORTS.filter(a => a.iata.toLowerCase() === q || a.city.toLowerCase().includes(q) || a.name.toLowerCase().includes(q))
+    .sort((a, b) => (b.iata.toLowerCase() === q) - (a.iata.toLowerCase() === q)).slice(0, 15);
+  apRes.hidden = false;
+  apRes.innerHTML = hits.length ? hits.map(a => `<div data-i="${a.icao}"><b>${a.iata}</b> · ${esc(a.name)}<br><small>${esc(a.city)}, ${esc(countryName(a.country))}</small></div>`).join('') : '<div>Δεν βρέθηκε</div>';
+};
+apRes.onclick = e => {
+  const d = e.target.closest('[data-i]'); if (!d) return;
+  const a = AIRPORTS.find(x => x.icao === d.dataset.i);
+  if (db.airports.some(x => x.iata === a.iata)) return alert('Υπάρχει ήδη.');
+  db.airports.push({id: uid(), iata: a.iata, name: a.name, city: a.city, cc: a.country.toLowerCase(), lat: a.lat, lon: a.lon});
+  apQ.value = ''; apRes.hidden = true; save();
+};
+function removeAirport(id) { db.airports = db.airports.filter(a => a.id !== id); save(); }
+function renderAirports() {
+  if (!db.airports.length) { apList.innerHTML = '<div class="empty">Δεν έχεις προσθέσει αεροδρόμια ακόμα.</div>'; return; }
+  apList.innerHTML = groupBy(db.airports).map(([cc, list], i) => `
+    <div class="country"><h2>${i + 1}. ${flag(cc)} ${esc(countryName(cc))}<span class="cnt">${list.length}</span></h2>
+    ${list.map(a => `<div class="city"><div class="ct">✈️ <b>${esc(a.iata)}</b> — ${esc(a.name)} <small style="color:var(--muted)">(${esc(a.city)})</small>
+      <button class="x" onclick="removeAirport('${a.id}')">✕</button></div></div>`).join('')}</div>`).join('');
+}
+
+// ---------- Ομαδοποίηση ----------
+function groupBy(items) {
+  const g = {};
+  items.forEach(p => (g[p.cc] ||= []).push(p));
+  return Object.entries(g).sort((a, b) => countryName(a[0]).localeCompare(countryName(b[0]), 'el'));
+}
+const attrsOf = pid => db.attractions.filter(a => a.placeId === pid);
+const notesOf = tid => db.notes.filter(n => n.targetId === tid);
+
+// ---------- Χώρες & Πόλεις ----------
+function renderCountries() {
+  if (!db.places.length) { cList.innerHTML = '<div class="empty">Πρόσθεσε μέρη από τον Χάρτη 📍</div>'; return; }
+  cList.innerHTML = groupBy(db.places).map(([cc, list], i) => `
+    <div class="country"><h2>${i + 1}. ${flag(cc)} ${esc(countryName(cc))}<span class="cnt">${list.length} ${list.length === 1 ? 'μέρος' : 'μέρη'}</span></h2>
+    ${list.map((p, j) => `<div class="city"><div class="ct"><span class="lbl">${grLetter(j)})</span> ${esc(p.name)}
+      <button class="x" onclick="removePlace('${p.id}')">✕</button></div></div>`).join('')}</div>`).join('');
+}
+
+// ---------- Αξιοθέατα ----------
+function renderAttractions() {
+  if (!db.places.length) { aList.innerHTML = '<div class="empty">Πρόσθεσε πρώτα μέρη από τον Χάρτη 📍</div>'; return; }
+  aList.innerHTML = groupBy(db.places).map(([cc, list], i) => `
+    <div class="country"><h2>${i + 1}. ${flag(cc)} ${esc(countryName(cc))}</h2>
+    ${list.map((p, j) => `<div class="city"><div class="ct"><span class="lbl">${grLetter(j)})</span> ${esc(p.name)}
+        <button class="btn sec small" onclick="openAttrPicker('${p.id}')">+ αξιοθέατο</button></div>
+      ${attrsOf(p.id).map((a, k) => `<div class="attr"><span class="lbl">${k + 1})</span> ${esc(a.name)}
+        <button class="x" onclick="removeAttr('${a.id}')">✕</button></div>`).join('')}
+    </div>`).join('')}</div>`).join('');
+}
+function removeAttr(id) {
+  db.attractions = db.attractions.filter(a => a.id !== id);
+  db.notes = db.notes.filter(n => n.targetId !== id); save();
+}
+
+let suggestions = [];
+async function openAttrPicker(pid) {
+  const p = db.places.find(x => x.id === pid);
+  openModal(`<h3>Αξιοθέατα: ${esc(p.name)}</h3>
+    <div class="row"><input type="text" id="attrQ" placeholder="Φίλτρο ή γράψε δικό σου…"><button class="btn" id="attrAdd">Προσθήκη</button></div>
+    <div class="results" id="attrRes"><div>Φόρτωση προτάσεων (λίγα δευτερόλεπτα)…</div></div>
+    <div style="text-align:right"><button class="btn sec" onclick="closeModal()">Κλείσιμο</button></div>`);
+  const draw = () => {
+    const q = attrQ.value.trim().toLowerCase();
+    const have = new Set(attrsOf(pid).map(a => a.name));
+    const list = suggestions.filter(s => !have.has(s.name) && (!q || s.name.toLowerCase().includes(q) || s.alt.toLowerCase().includes(q)));
+    attrRes.innerHTML = list.length ? list.map(s => `<div data-n="${esc(s.name)}">${esc(s.name)}${s.alt && s.alt !== s.name ? ` <small>${esc(s.alt)}</small>` : ''}</div>`).join('')
+      : '<div>Καμία πρόταση — γράψε το όνομα και πάτα «Προσθήκη»</div>';
+  };
+  const add = (name, s) => {
+    if (!name) return;
+    db.attractions.push({id: uid(), placeId: pid, name, lat: s?.lat, lon: s?.lon}); save(); draw();
+    attrQ.value = ''; draw();
+  };
+  attrQ.oninput = draw;
+  attrAdd.onclick = () => add(attrQ.value.trim());
+  attrQ.onkeydown = e => { if (e.key === 'Enter') add(attrQ.value.trim()); };
+  attrRes.onclick = e => { const d = e.target.closest('[data-n]'); if (d) add(d.dataset.n, suggestions.find(s => s.name === d.dataset.n)); };
+  suggestions = [];
+  try { suggestions = await fetchSights(p.lat, p.lon); } catch {}
+  if (document.getElementById('attrRes')) draw();
+}
+
+// Προτάσεις από Wikidata: ταξινόμηση κατά δημοφιλία (πλήθος άρθρων Wikipedia)
+async function fetchSights(lat, lon) {
+  const q = `SELECT ?item ?itemLabel ?en ?loc ?links WHERE {
+    { SELECT ?item ?loc ?links WHERE {
+      SERVICE wikibase:around { ?item wdt:P625 ?loc. bd:serviceParam wikibase:center "Point(${lon} ${lat})"^^geo:wktLiteral; wikibase:radius "6". }
+      ?item wikibase:sitelinks ?links. FILTER(?links > 3)
+    } ORDER BY DESC(?links) LIMIT 200 }
+    FILTER NOT EXISTS { ?item wdt:P31/wdt:P279* ?bad. VALUES ?bad { wd:Q7275 wd:Q56061 wd:Q486972 wd:Q1048835 wd:Q15642541 wd:Q5 wd:Q1190554 wd:Q1656682 wd:Q3305213 wd:Q11514315 wd:Q4830453 wd:Q131569 wd:Q55488 wd:Q3914 wd:Q16917 wd:Q1248784 wd:Q4022 wd:Q5633421 } }
+    OPTIONAL { ?item rdfs:label ?en FILTER(lang(?en)="en") }
+    SERVICE wikibase:label { bd:serviceParam wikibase:language "el,en,it,fr,es,de". }
+  } ORDER BY DESC(?links) LIMIT 100`;
+  const r = await fetch('https://query.wikidata.org/sparql?format=json&query=' + encodeURIComponent(q), {headers:{Accept:'application/sparql-results+json'}});
+  const seen = new Set();
+  return (await r.json()).results.bindings.map(b => {
+    const name = b.itemLabel.value;
+    if (/^Q\d+$/.test(name) || seen.has(name)) return null; seen.add(name);
+    const m = b.loc.value.match(/Point\(([-\d.]+) ([-\d.]+)\)/);
+    return {name, alt: b.en?.value || '', kind: '', lon: m ? +m[1] : null, lat: m ? +m[2] : null};
+  }).filter(Boolean);
+}
+
+// ---------- Εντυπώσεις ----------
+function noteBlock(tid) {
+  return `${notesOf(tid).map(n => `<div class="note"><div class="d"><span>${new Date(n.date).toLocaleDateString('el-GR')}</span>
+      <button class="x" onclick="removeNote('${n.id}')">✕</button></div>${esc(n.text)}</div>`).join('')}
+    <div class="addnote" id="an-${tid}"><textarea id="ta-${tid}" placeholder="Τι θυμάσαι; Τι δεν θέλεις να ξεχάσεις;"></textarea>
+      <button class="btn small" onclick="addNote('${tid}')">Αποθήκευση</button></div>`;
+}
+const noteBtn = tid => `<button class="btn sec small" onclick="toggleNote('${tid}')">✏️</button>`;
+function renderNotes() {
+  if (!db.places.length) { nList.innerHTML = '<div class="empty">Πρόσθεσε πρώτα μέρη από τον Χάρτη 📍</div>'; return; }
+  nList.innerHTML = groupBy(db.places).map(([cc, list], i) => `
+    <div class="country"><h2>${i + 1}. ${flag(cc)} ${esc(countryName(cc))}</h2>
+    ${list.map((p, j) => `<div class="city"><div class="ct"><span class="lbl">${grLetter(j)})</span> ${esc(p.name)} ${noteBtn(p.id)}</div>
+      ${noteBlock(p.id)}
+      ${attrsOf(p.id).map((a, k) => `<div class="attr"><span class="lbl">${k + 1})</span> ${esc(a.name)} ${noteBtn(a.id)}</div>
+        <div style="margin-left:24px">${noteBlock(a.id)}</div>`).join('')}
+    </div>`).join('')}</div>`).join('');
+}
+function toggleNote(tid) {
+  const el = document.getElementById('an-' + tid);
+  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+  if (el.style.display === 'block') document.getElementById('ta-' + tid).focus();
+}
+function addNote(tid) {
+  const text = document.getElementById('ta-' + tid).value.trim(); if (!text) return;
+  db.notes.push({id: uid(), targetId: tid, text, date: new Date().toISOString()}); save();
+}
+function removeNote(id) { if (confirm('Διαγραφή εντύπωσης;')) { db.notes = db.notes.filter(n => n.id !== id); save(); } }
+
+// ---------- Modal / Backup ----------
+function openModal(html) { modal.innerHTML = html; modalBg.style.display = 'flex'; }
+function closeModal() { modalBg.style.display = 'none'; }
+modalBg.onclick = e => { if (e.target === modalBg) closeModal(); };
+exp.onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(db, null, 2)], {type:'application/json'}));
+  a.download = `taxidia-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+};
+imp.onchange = async () => {
+  try {
+    const d = JSON.parse(await imp.files[0].text());
+    if (!d.places) throw 0;
+    if (confirm('Αντικατάσταση όλων των δεδομένων με το αρχείο;')) { db = {places:[], attractions:[], airports:[], notes:[], ...d}; save(); }
+  } catch { alert('Μη έγκυρο αρχείο'); }
+  imp.value = '';
+};
+
+// ---------- Render ----------
+function renderAll() {
+  const countries = new Set(db.places.map(p => p.cc)).size;
+  stats.textContent = `${countries} χώρες · ${db.places.length} μέρη · ${db.attractions.length} αξιοθέατα · ${db.airports.length} αεροδρόμια`;
+  renderMap(); renderAirports(); renderCountries(); renderAttractions(); renderNotes();
+}
+renderAll();
+
+// ---------- Εγκατάσταση στο κινητό ----------
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+// Ζητάμε από τον browser να μη σβήσει ποτέ τα δεδομένα αυτόματα
+if (navigator.storage?.persist) navigator.storage.persist();
+</script>
+</body>
+</html>
