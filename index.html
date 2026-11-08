@@ -176,7 +176,7 @@ L.control.zoom({position:'bottomright'}).addTo(map);
 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
   maxZoom:19, attribution:'Tiles © Esri — Esri, HERE, Garmin, © OpenStreetMap'}).addTo(map);
 
-// Χρωματισμός χωρών που έχεις επισκεφθεί
+// Σύνορα χωρών (χρησιμοποιούνται μόνο στην εικόνα κοινοποίησης)
 const WORLD_URL = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson';
 let WORLD = null;
 async function loadWorld() {
@@ -188,15 +188,6 @@ async function loadWorld() {
   });
   return WORLD = g;
 }
-const countryLayer = L.geoJSON(null, {interactive:false,
-  style: {color:'#0e7c86', weight:1.2, fillColor:'#14a3ad', fillOpacity:.28}}).addTo(map);
-function renderCountryLayer() {
-  if (!WORLD) return;
-  const v = new Set(db.places.map(p => p.cc));
-  countryLayer.clearLayers();
-  countryLayer.addData(WORLD.features.filter(f => v.has(f.cc)));
-}
-loadWorld().then(renderCountryLayer).catch(() => {});
 
 // Πινέζες
 const pinIcon = L.divIcon({className:'pin', iconSize:[28,38], iconAnchor:[14,37], popupAnchor:[0,-33],
@@ -235,7 +226,6 @@ function renderMap() {
     L.marker([a.lat, a.lon], {icon:planeIcon, title:a.iata}).addTo(layer)
       .bindPopup(`<div class="pop-h">${flag(a.cc)} ${esc(a.iata)}</div><div class="pop-sub">${esc(a.name)}<br>${esc(a.city)}</div>`);
   });
-  renderCountryLayer();
   const nc = new Set(db.places.map(p => p.cc)).size, pct = Math.round(nc / TOTAL_COUNTRIES * 100);
   document.getElementById('mapchip').innerHTML =
     `<b>${nc}</b> ${nc === 1 ? 'χώρα' : 'χώρες'} · <b>${db.places.length}</b> μέρη<br>
