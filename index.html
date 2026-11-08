@@ -501,7 +501,13 @@ function fitText(ctx, t, w) {
   while (t.length && ctx.measureText(t + '…').width > w) t = t.slice(0, -1);
   return t + '…';
 }
-function rrect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+// Στρογγυλεμένο ορθογώνιο (χωρίς ctx.roundRect, που λείπει από παλαιότερα iPhone/Android)
+function rrect(ctx, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath(); ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
 
 async function drawShareImage(name, withCities) {
   const W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H;
@@ -610,6 +616,7 @@ async function openShare() {
     <label class="opt"><input type="checkbox" id="shCities" checked> Να φαίνονται και οι πόλεις</label>
     <div id="shWait" class="hint" style="text-align:center;padding:30px 0">⏳ Δημιουργία εικόνας…</div>
     <img id="shareImg" alt="" hidden onload="this.hidden=false;shWait.hidden=true">
+    <div id="shTip" class="hint" style="padding:8px 10px;border-radius:8px">💡 Αν το κουμπί δεν δουλεύει: πάτα παρατεταμένα πάνω στην εικόνα → «Κοινοποίηση» ή «Αποθήκευση».</div>
     <div class="sharebtns">
       <button class="btn" id="shSend">📤 Στείλε την εικόνα</button>
       <button class="btn sec" id="shSave">⬇️ Αποθήκευση εικόνας</button>
@@ -618,22 +625,38 @@ async function openShare() {
     <div style="text-align:right;margin-top:12px"><button class="btn sec small" onclick="closeModal()">Κλείσιμο</button></div>`);
   let t;
   const redraw = async () => {
-    localStorage.setItem('travel-share-name', shName.value.trim());
-    const c = await drawShareImage(shName.value.trim(), shCities.checked);
-    shareBlob = await new Promise(r => c.toBlob(r, 'image/png'));
-    if (document.getElementById('shareImg')) shareImg.src = URL.createObjectURL(shareBlob);
+    try {
+      localStorage.setItem('travel-share-name', shName.value.trim());
+      const c = await drawShareImage(shName.value.trim(), shCities.checked);
+      // JPEG: μικρότερο αρχείο, το δέχονται όλες οι εφαρμογές μηνυμάτων
+      const url = c.toDataURL('image/jpeg', 0.9);
+      shareBlob = await (await fetch(url)).blob();
+      if (document.getElementById('shareImg')) shareImg.src = url;   // data URL: δουλεύει και το παρατεταμένο πάτημα
+    } catch (e) {
+      if (document.getElementById('shWait')) shWait.textContent = '❌ Σφάλμα στη δημιουργία εικόνας: ' + (e.message || e);
+    }
   };
   shName.oninput = () => { clearTimeout(t); t = setTimeout(redraw, 400); };
   shCities.onchange = redraw;
-  const file = () => new File([shareBlob], 'ta-taxidia-mou.png', {type:'image/png'});
-  const download = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(shareBlob); a.download = 'ta-taxidia-mou.png'; a.click(); };
-  shSend.onclick = async () => {
-    if (!shareBlob) return;
-    if (navigator.canShare?.({files:[file()]})) {
-      try { await navigator.share({files:[file()], title:'Τα Ταξίδια μου', text:`Δες πού έχω ταξιδέψει! 🌍\nΦτιάξε κι εσύ τον δικό σου χάρτη: ${APP_URL}`}); } catch {}
-    } else { download(); alert('Η εικόνα αποθηκεύτηκε — μπορείς να τη στείλεις από όπου θέλεις.'); }
+  const file = () => new File([shareBlob], 'ta-taxidia-mou.jpg', {type:'image/jpeg', lastModified: Date.now()});
+  const download = () => { const a = document.createElement('a'); a.href = shareImg.src; a.download = 'ta-taxidia-mou.jpg';
+    document.body.appendChild(a); a.click(); a.remove(); };
+  const fallback = why => {
+    shTip.innerHTML = `⚠️ ${why}<br><b>Πάτα παρατεταμένα πάνω στην εικόνα</b> → «Κοινοποίηση» ή «Αποθήκευση εικόνας», και μετά στείλ' την από το Viber / WhatsApp.`;
+    shTip.style.background = '#fff4d6'; shTip.scrollIntoView({behavior:'smooth', block:'center'});
   };
-  shSave.onclick = () => shareBlob && download();
+  shSend.onclick = async () => {
+    if (!shareBlob) return toast('⏳ Η εικόνα ετοιμάζεται, δοκίμασε σε λίγο');
+    if (IN_APP) return fallback('Μέσα στο Viber/Messenger δεν υποστηρίζεται η αποστολή αρχείων.');
+    if (!navigator.canShare?.({files:[file()]})) return fallback('Αυτός ο browser δεν υποστηρίζει αποστολή εικόνας.');
+    // Μόνο το αρχείο: με κείμενο μαζί, πολλές εφαρμογές (π.χ. WhatsApp σε iPhone) στέλνουν μόνο το κείμενο
+    try { await navigator.share({files:[file()]}); }
+    catch (e) {
+      if (e.name === 'AbortError') return;   // ο χρήστης έκλεισε το μενού
+      fallback(`Η αποστολή δεν ολοκληρώθηκε (${e.name}).`);
+    }
+  };
+  shSave.onclick = () => shareBlob && (IN_APP ? fallback('Μέσα στο Viber/Messenger η λήψη αρχείων δεν λειτουργεί.') : download());
   shApp.onclick = async () => {
     const text = 'Φτιάξε τον δικό σου ταξιδιωτικό χάρτη — δωρεάν, χωρίς διαφημίσεις 🌍';
     if (navigator.share) { try { await navigator.share({title:'Τα Ταξίδια μου', text, url:APP_URL}); } catch {} }
