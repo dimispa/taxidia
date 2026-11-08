@@ -1,5 +1,5 @@
 // Service worker: η εφαρμογή ανοίγει και χωρίς ίντερνετ
-const APP = 'taxidia-app-v1', TILES = 'taxidia-tiles-v1', DATA = 'taxidia-data-v1';
+const APP = 'taxidia-app-v2', TILES = 'taxidia-tiles-v1', DATA = 'taxidia-data-v1';
 const SHELL = ['./', './index.html', './manifest.json', './icon-192.png', './icon-512.png',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css', 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'];
 
@@ -21,7 +21,7 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
 
   // Χάρτης: πρώτα δίκτυο, αλλιώς ό,τι έχει αποθηκευτεί
-  if (url.hostname.endsWith('tile.openstreetmap.org')) {
+  if (url.hostname.endsWith('tile.openstreetmap.org') || url.hostname === 'server.arcgisonline.com') {
     e.respondWith(fetch(req).then(r => {
       const copy = r.clone(); caches.open(TILES).then(c => c.put(req, copy)).then(trimTiles); return r;
     }).catch(() => caches.match(req)));

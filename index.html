@@ -26,7 +26,29 @@
   nav button.active{background:var(--bg);color:var(--ink);font-weight:600}
   main{max-width:900px;margin:0 auto;padding:16px}
   section{display:none} section.active{display:block}
-  #map{height:62vh;border-radius:12px;border:1px solid var(--line)}
+  #map{height:62vh;border-radius:16px;box-shadow:0 6px 24px #0e7c8626,0 1px 3px #0002;background:#d9eef2}
+  .leaflet-container{font-family:inherit}
+  .pin{background:none;border:0;filter:drop-shadow(0 2px 2px #0005);transition:transform .15s}
+  .pin:hover{transform:scale(1.15)}
+  .plane{background:#fff;border-radius:50%;box-shadow:0 1px 4px #0004;display:flex;align-items:center;justify-content:center;font-size:14px}
+  .leaflet-popup-content-wrapper{border-radius:14px;box-shadow:0 8px 24px #0003}
+  .leaflet-popup-content{margin:12px 14px;font-size:14px;line-height:1.45}
+  .pop-h{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:700}
+  .pop-h img{width:26px;border-radius:3px;box-shadow:0 0 0 1px #0002}
+  .pop-sub{color:var(--muted);font-size:13px;margin:2px 0 8px}
+  .pop-meta{font-size:13px;margin-bottom:8px}
+  .mapchip{background:#fffffff0;backdrop-filter:blur(4px);border-radius:12px;padding:8px 12px;box-shadow:0 2px 10px #0002;font-size:13px;line-height:1.35}
+  .mapchip b{color:var(--accent);font-size:17px}
+  .mapchip .bar{height:6px;background:#e5e7eb;border-radius:3px;margin-top:5px;overflow:hidden;width:150px}
+  .mapchip .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),#f2b705)}
+  .mapbtn{background:#fff;border:0;border-radius:10px;box-shadow:0 2px 8px #0003;padding:8px 11px;font-size:13px;cursor:pointer;font-family:inherit}
+  .hrow{display:flex;align-items:center;gap:10px}
+  .hbtn{margin-left:auto;background:#ffffff26;color:#fff;border:1px solid #ffffff59;border-radius:20px;padding:6px 14px;font-size:14px;cursor:pointer;font-family:inherit}
+  .hbtn:hover{background:#ffffff40}
+  #shareImg{width:100%;border-radius:10px;box-shadow:0 2px 10px #0002;display:block;margin:10px 0;min-height:120px;background:#eee}
+  .opt{display:flex;align-items:center;gap:8px;font-size:14px;margin:6px 0}
+  .sharebtns{display:flex;flex-wrap:wrap;gap:8px}
+  .sharebtns .btn{flex:1;min-width:140px}
   .row{display:flex;gap:8px;margin-bottom:10px}
   input[type=text],textarea{flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:15px;font-family:inherit;background:#fff}
   textarea{width:100%;min-height:60px;resize:vertical}
@@ -68,7 +90,9 @@
     nav button .t{font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
     nav button.active{background:#e6f4f5;color:var(--accent)}
     main{padding:12px 10px calc(84px + env(safe-area-inset-bottom))}
-    #map{height:calc(100vh - 270px);min-height:300px}
+    #map{height:calc(100vh - 250px);min-height:300px;border-radius:14px}
+    .hbtn{padding:5px 11px;font-size:13px}
+    .mapchip .bar{width:110px}
     input[type=text],textarea{font-size:16px}
     .country{padding:10px 12px}
     .country h2{font-size:17px}
@@ -83,7 +107,7 @@
 </head>
 <body>
 <header>
-  <h1>🌍 Τα Ταξίδια μου</h1>
+  <div class="hrow"><h1>🌍 Τα Ταξίδια μου</h1><button class="hbtn" id="shareBtn">📤 Κοινοποίηση</button></div>
   <div class="stats" id="stats"></div>
   <nav>
     <button data-p="map" class="active">📍 <span class="t">Χάρτης</span></button>
@@ -147,20 +171,75 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 });
 
 // ---------- Χάρτης ----------
-const map = L.map('map', {worldCopyJump:true}).setView([38, 15], 3);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:18, attribution:'© OpenStreetMap'}).addTo(map);
+const map = L.map('map', {worldCopyJump:true, zoomControl:false, minZoom:2}).setView([38, 15], 3);
+L.control.zoom({position:'bottomright'}).addTo(map);
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
+  maxZoom:19, attribution:'Tiles © Esri — Esri, HERE, Garmin, © OpenStreetMap'}).addTo(map);
+
+// Χρωματισμός χωρών που έχεις επισκεφθεί
+const WORLD_URL = 'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson';
+let WORLD = null;
+async function loadWorld() {
+  if (WORLD) return WORLD;
+  const g = await (await fetch(WORLD_URL)).json();
+  g.features.forEach(f => {
+    const p = f.properties, a2 = p.ISO_A2_EH && p.ISO_A2_EH !== '-99' ? p.ISO_A2_EH : p.ISO_A2;
+    f.cc = String(a2).toLowerCase();
+  });
+  return WORLD = g;
+}
+const countryLayer = L.geoJSON(null, {interactive:false,
+  style: {color:'#0e7c86', weight:1.2, fillColor:'#14a3ad', fillOpacity:.28}}).addTo(map);
+function renderCountryLayer() {
+  if (!WORLD) return;
+  const v = new Set(db.places.map(p => p.cc));
+  countryLayer.clearLayers();
+  countryLayer.addData(WORLD.features.filter(f => v.has(f.cc)));
+}
+loadWorld().then(renderCountryLayer).catch(() => {});
+
+// Πινέζες
+const pinIcon = L.divIcon({className:'pin', iconSize:[28,38], iconAnchor:[14,37], popupAnchor:[0,-33],
+  html:'<svg viewBox="0 0 28 38" width="28" height="38"><path d="M14 1C7 1 1.5 6.6 1.5 13.5 1.5 23 14 37 14 37s12.5-14 12.5-23.5C26.5 6.6 21 1 14 1z" fill="#e4572e" stroke="#fff" stroke-width="2"/><circle cx="14" cy="13.5" r="5" fill="#fff"/></svg>'});
+const planeIcon = L.divIcon({className:'plane', html:'✈️', iconSize:[26,26], iconAnchor:[13,13], popupAnchor:[0,-12]});
 const layer = L.layerGroup().addTo(map);
+const TOTAL_COUNTRIES = 195;
+
+// Κάρτα με στατιστικά πάνω στον χάρτη
+const chip = L.control({position:'topleft'});
+chip.onAdd = () => { const d = L.DomUtil.create('div', 'mapchip'); d.id = 'mapchip'; L.DomEvent.disableClickPropagation(d); return d; };
+chip.addTo(map);
+const fitCtl = L.control({position:'topright'});
+fitCtl.onAdd = () => { const b = L.DomUtil.create('button', 'mapbtn'); b.innerHTML = '🌍 Όλα'; b.title = 'Δείξε όλα τα μέρη';
+  L.DomEvent.disableClickPropagation(b); b.onclick = fitAll; return b; };
+fitCtl.addTo(map);
+function fitAll() {
+  const pts = [...db.places, ...db.airports].map(p => [p.lat, p.lon]);
+  if (pts.length === 1) map.setView(pts[0], 8);
+  else if (pts.length) map.fitBounds(pts, {padding:[40, 40], maxZoom:8});
+  else map.setView([38, 15], 3);
+}
 
 function renderMap() {
   layer.clearLayers();
   db.places.forEach(p => {
-    L.marker([p.lat, p.lon]).addTo(layer)
-      .bindPopup(`<b>${esc(p.name)}</b><br>${esc(countryName(p.cc))}<br><button class="btn small" onclick="removePlace('${p.id}')">Αφαίρεση</button>`);
+    const na = attrsOf(p.id).length, nn = notesOf(p.id).length + attrsOf(p.id).reduce((s, a) => s + notesOf(a.id).length, 0);
+    L.marker([p.lat, p.lon], {icon:pinIcon, title:p.name}).addTo(layer).bindPopup(`
+      <div class="pop-h">${flag(p.cc)} ${esc(p.name)}</div>
+      <div class="pop-sub">${esc(countryName(p.cc))}</div>
+      <div class="pop-meta">🏛️ ${na} αξιοθέατα · 📝 ${nn} εντυπώσεις</div>
+      <button class="btn small" onclick="openAttrPicker('${p.id}')">+ αξιοθέατο</button>
+      <button class="btn sec small" onclick="removePlace('${p.id}')">Αφαίρεση</button>`);
   });
   db.airports.forEach(a => {
-    L.circleMarker([a.lat, a.lon], {radius:6, color:'#e4572e', fillOpacity:.8}).addTo(layer)
-      .bindPopup(`✈️ <b>${esc(a.iata)}</b> ${esc(a.name)}`);
+    L.marker([a.lat, a.lon], {icon:planeIcon, title:a.iata}).addTo(layer)
+      .bindPopup(`<div class="pop-h">${flag(a.cc)} ${esc(a.iata)}</div><div class="pop-sub">${esc(a.name)}<br>${esc(a.city)}</div>`);
   });
+  renderCountryLayer();
+  const nc = new Set(db.places.map(p => p.cc)).size, pct = Math.round(nc / TOTAL_COUNTRIES * 100);
+  document.getElementById('mapchip').innerHTML =
+    `<b>${nc}</b> ${nc === 1 ? 'χώρα' : 'χώρες'} · <b>${db.places.length}</b> μέρη<br>
+     <span style="color:var(--muted)">${pct}% του κόσμου</span><div class="bar"><i style="width:${Math.max(pct, nc ? 2 : 0)}%"></i></div>`;
 }
 
 const NOM = 'https://nominatim.openstreetmap.org';
@@ -387,6 +466,157 @@ imp.onchange = async () => {
   imp.value = '';
 };
 
+// ---------- Κοινοποίηση ----------
+const APP_URL = location.origin + location.pathname.replace(/index\.html$/, '');
+const loadImg = src => new Promise(res => { const i = new Image(); i.crossOrigin = 'anonymous';
+  i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
+function fitText(ctx, t, w) {
+  if (ctx.measureText(t).width <= w) return t;
+  while (t.length && ctx.measureText(t + '…').width > w) t = t.slice(0, -1);
+  return t + '…';
+}
+function rrect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+
+async function drawShareImage(name, withCities) {
+  const W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const ctx = c.getContext('2d'), F = 'system-ui,-apple-system,"Segoe UI",Roboto,sans-serif';
+  const groups = groupBy(db.places).sort((a, b) => b[1].length - a[1].length);
+  const nc = groups.length, pct = Math.round(nc / TOTAL_COUNTRIES * 100);
+
+  // Φόντο
+  const g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#0e7c86'); g.addColorStop(1, '#083d4f');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+  // Τίτλος
+  ctx.fillStyle = '#fff'; ctx.font = `800 64px ${F}`;
+  ctx.fillText(fitText(ctx, name || 'Τα Ταξίδια μου', W - 120), 60, 110);
+  ctx.font = `500 30px ${F}`; ctx.fillStyle = '#bfe7ea';
+  ctx.fillText(name ? 'Τα ταξίδια μου μέχρι σήμερα' : 'Ο ταξιδιωτικός μου χάρτης', 60, 158);
+
+  // Στατιστικά
+  const st = [[nc, nc === 1 ? 'χώρα' : 'χώρες'], [db.places.length, 'μέρη'], [db.attractions.length, 'αξιοθέατα'], [db.airports.length, 'αεροδρόμια']];
+  const bw = (W - 120 - 3 * 20) / 4;
+  st.forEach(([n, l], i) => {
+    const x = 60 + i * (bw + 20);
+    ctx.fillStyle = '#ffffff1f'; rrect(ctx, x, 195, bw, 120, 18); ctx.fill();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff'; ctx.font = `800 52px ${F}`; ctx.fillText(n, x + bw / 2, 265);
+    ctx.font = `500 24px ${F}`; ctx.fillStyle = '#bfe7ea'; ctx.fillText(l, x + bw / 2, 298);
+    ctx.textAlign = 'left';
+  });
+
+  // Παγκόσμιος χάρτης
+  const mx = 40, my = 345, mw = W - 80, mh = mw * (140 / 360), AR = mw / mh;
+  // Κάδρο: εστίαση στην περιοχή των ταξιδιών (με περιθώριο), αλλιώς όλος ο κόσμος
+  let vx = -180, vy = 84, vw = 360;
+  if (db.places.length) {
+    const lons = db.places.map(p => p.lon), lats = db.places.map(p => p.lat);
+    const x0 = Math.min(...lons), x1 = Math.max(...lons), y0 = Math.min(...lats), y1 = Math.max(...lats);
+    vw = Math.min(360, Math.max(50, (x1 - x0) * 1.3 + 24, ((y1 - y0) * 1.3 + 16) * AR));
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, vh = vw / AR;
+    vx = Math.min(Math.max(cx - vw / 2, -180), 180 - vw);
+    vy = Math.max(Math.min(cy + vh / 2, 84), -56 + vh);
+  }
+  const P = (lon, lat) => [mx + (lon - vx) / vw * mw, my + (vy - lat) / (vw / AR) * mh];
+  ctx.save(); rrect(ctx, mx, my, mw, mh, 22); ctx.fillStyle = '#ffffff0d'; ctx.fill(); ctx.clip();
+  try {
+    const world = await loadWorld(), v = new Set(db.places.map(p => p.cc));
+    world.features.forEach(f => {
+      if (f.properties.ADMIN === 'Antarctica') return;
+      const polys = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
+      ctx.beginPath();
+      polys.forEach(poly => poly.forEach(ring => ring.forEach(([lo, la], k) => {
+        const [x, y] = P(lo, Math.max(la, -56)); k ? ctx.lineTo(x, y) : ctx.moveTo(x, y); })));
+      ctx.fillStyle = v.has(f.cc) ? '#f2b705' : '#ffffff2e'; ctx.fill('evenodd');
+      ctx.strokeStyle = '#083d4f'; ctx.lineWidth = vw < 200 ? 1.5 : 0.8; ctx.stroke();
+    });
+  } catch {}
+  db.places.forEach(p => { const [x, y] = P(p.lon, p.lat);
+    ctx.beginPath(); ctx.arc(x, y, 5, 0, 7); ctx.fillStyle = '#e4572e'; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke(); });
+  ctx.restore();
+
+  // Πρόοδος
+  let y = my + mh + 40;
+  ctx.font = `600 26px ${F}`; ctx.fillStyle = '#fff'; ctx.fillText(`${pct}% του κόσμου`, 60, y);
+  ctx.fillStyle = '#ffffff2e'; rrect(ctx, 290, y - 18, W - 350, 16, 8); ctx.fill();
+  ctx.fillStyle = '#f2b705'; rrect(ctx, 290, y - 18, Math.max(16, (W - 350) * pct / 100), 16, 8); ctx.fill();
+
+  // Λίστα χωρών (2 στήλες)
+  y += 40;
+  const rowH = withCities ? 70 : 54, colW = (W - 120 - 40) / 2;
+  const rows = Math.floor((H - 90 - y) / rowH), max = rows * 2;
+  const shown = groups.length > max ? groups.slice(0, max - 1) : groups;
+  const flags = await Promise.all(shown.map(([cc]) => loadImg(`https://flagcdn.com/w80/${cc}.png?cors=1`)));
+  const cell = i => [60 + Math.floor(i / rows) * (colW + 40), y + (i % rows) * rowH];
+  shown.forEach(([cc, list], i) => {
+    const [x, yy] = cell(i);
+    if (flags[i]) { ctx.save(); rrect(ctx, x, yy, 48, 34, 5); ctx.clip(); ctx.drawImage(flags[i], x, yy, 48, 34); ctx.restore(); }
+    ctx.fillStyle = '#fff'; ctx.font = `700 28px ${F}`;
+    ctx.fillText(fitText(ctx, countryName(cc), colW - 120), x + 62, yy + 27);
+    ctx.font = `600 24px ${F}`; ctx.fillStyle = '#f2b705'; ctx.textAlign = 'right';
+    ctx.fillText(list.length, x + colW, yy + 27); ctx.textAlign = 'left';
+    if (withCities) {
+      ctx.font = `400 21px ${F}`; ctx.fillStyle = '#bfe7ea';
+      ctx.fillText(fitText(ctx, list.map(p => p.name).join(' · '), colW - 62), x + 62, yy + 56);
+    }
+  });
+  if (shown.length < groups.length) {
+    const [x, yy] = cell(shown.length);
+    ctx.font = `600 26px ${F}`; ctx.fillStyle = '#bfe7ea';
+    ctx.fillText(`+ ${groups.length - shown.length} ακόμα χώρες`, x + 62, yy + 27);
+  }
+  if (!groups.length) { ctx.font = `500 30px ${F}`; ctx.fillStyle = '#bfe7ea'; ctx.fillText('Το πρώτο ταξίδι περιμένει!', 60, y + 30); }
+
+  // Υποσέλιδο
+  ctx.fillStyle = '#ffffff1a'; ctx.fillRect(0, H - 70, W, 70);
+  ctx.font = `500 24px ${F}`; ctx.fillStyle = '#d7f1f3';
+  ctx.fillText('Τα Ταξίδια μου', 60, H - 27);
+  ctx.textAlign = 'right'; ctx.fillText(APP_URL.replace(/^https?:\/\//, '').replace(/\/$/, ''), W - 60, H - 27); ctx.textAlign = 'left';
+  return c;
+}
+
+let shareBlob = null;
+async function openShare() {
+  openModal(`<h3>📤 Κοινοποίηση</h3>
+    <label class="opt" for="shName">Όνομα στην εικόνα (προαιρετικό):</label>
+    <div class="row"><input type="text" id="shName" placeholder="π.χ. Δημήτρης" value="${esc(localStorage.getItem('travel-share-name') || '')}"></div>
+    <label class="opt"><input type="checkbox" id="shCities" checked> Να φαίνονται και οι πόλεις</label>
+    <div id="shWait" class="hint" style="text-align:center;padding:30px 0">⏳ Δημιουργία εικόνας…</div>
+    <img id="shareImg" alt="" hidden onload="this.hidden=false;shWait.hidden=true">
+    <div class="sharebtns">
+      <button class="btn" id="shSend">📤 Στείλε την εικόνα</button>
+      <button class="btn sec" id="shSave">⬇️ Αποθήκευση εικόνας</button>
+      <button class="btn sec" id="shApp">🔗 Στείλε την εφαρμογή</button>
+    </div>
+    <div style="text-align:right;margin-top:12px"><button class="btn sec small" onclick="closeModal()">Κλείσιμο</button></div>`);
+  let t;
+  const redraw = async () => {
+    localStorage.setItem('travel-share-name', shName.value.trim());
+    const c = await drawShareImage(shName.value.trim(), shCities.checked);
+    shareBlob = await new Promise(r => c.toBlob(r, 'image/png'));
+    if (document.getElementById('shareImg')) shareImg.src = URL.createObjectURL(shareBlob);
+  };
+  shName.oninput = () => { clearTimeout(t); t = setTimeout(redraw, 400); };
+  shCities.onchange = redraw;
+  const file = () => new File([shareBlob], 'ta-taxidia-mou.png', {type:'image/png'});
+  const download = () => { const a = document.createElement('a'); a.href = URL.createObjectURL(shareBlob); a.download = 'ta-taxidia-mou.png'; a.click(); };
+  shSend.onclick = async () => {
+    if (!shareBlob) return;
+    if (navigator.canShare?.({files:[file()]})) {
+      try { await navigator.share({files:[file()], title:'Τα Ταξίδια μου', text:`Δες πού έχω ταξιδέψει! 🌍\nΦτιάξε κι εσύ τον δικό σου χάρτη: ${APP_URL}`}); } catch {}
+    } else { download(); alert('Η εικόνα αποθηκεύτηκε — μπορείς να τη στείλεις από όπου θέλεις.'); }
+  };
+  shSave.onclick = () => shareBlob && download();
+  shApp.onclick = async () => {
+    const text = 'Φτιάξε τον δικό σου ταξιδιωτικό χάρτη — δωρεάν, χωρίς διαφημίσεις 🌍';
+    if (navigator.share) { try { await navigator.share({title:'Τα Ταξίδια μου', text, url:APP_URL}); } catch {} }
+    else { await navigator.clipboard.writeText(APP_URL); alert('Ο σύνδεσμος αντιγράφηκε: ' + APP_URL); }
+  };
+  await redraw();
+}
+shareBtn.onclick = openShare;
+
 // ---------- Render ----------
 function renderAll() {
   const countries = new Set(db.places.map(p => p.cc)).size;
@@ -394,6 +624,7 @@ function renderAll() {
   renderMap(); renderAirports(); renderCountries(); renderAttractions(); renderNotes();
 }
 renderAll();
+fitAll();
 
 // ---------- Εγκατάσταση στο κινητό ----------
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
