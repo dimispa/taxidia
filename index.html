@@ -80,7 +80,11 @@
   .modal-bg{position:fixed;inset:0;background:#0006;display:none;align-items:center;justify-content:center;z-index:2000}
   .modal{background:#fff;border-radius:12px;padding:16px;width:min(560px,94vw);max-height:86vh;overflow:auto}
   .modal h3{margin-top:0}
-  .tools{display:flex;gap:8px;justify-content:flex-end;margin-top:24px}
+  .tools{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end;margin-top:24px}
+  .banner{background:#fff4d6;border:1px solid #f2b705;border-radius:12px;padding:10px 12px;margin-bottom:12px;font-size:14px;line-height:1.45;position:relative}
+  .banner.warn{background:#fde8e4;border-color:#e4572e}
+  .banner .x{position:absolute;top:4px;right:4px}
+  .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:#1f2a37;color:#fff;padding:10px 16px;border-radius:20px;z-index:3000;font-size:14px;box-shadow:0 4px 16px #0004}
   nav button .t{display:inline}
   /* ---- Κινητό ---- */
   @media (max-width:700px){
@@ -122,6 +126,7 @@
 </header>
 
 <main>
+  <div id="banners"></div>
   <section id="p-map" class="active">
     <div class="row">
       <input type="text" id="placeQ" placeholder="Αναζήτηση πόλης, χωριού, νησιού… (π.χ. Οία, Φλωρεντία)">
@@ -145,6 +150,7 @@
   <section id="p-notes"><div id="nList"></div></section>
 
   <div class="tools">
+    <span id="storeState" class="hint" style="margin:0 auto 0 0;align-self:center"></span>
     <button class="btn sec small" id="exp">⬇️ Αντίγραφο ασφαλείας</button>
     <label class="btn sec small">⬆️ Επαναφορά<input type="file" id="imp" accept=".json" hidden></label>
   </div>
@@ -154,9 +160,35 @@
 
 <script>
 // ---------- Δεδομένα ----------
+// Τα δεδομένα αποθηκεύονται ΔΙΠΛΑ: localStorage + IndexedDB (με ημερήσια αντίγραφα).
+// Αν χαθεί το ένα, γίνεται αυτόματη ανάκτηση από το άλλο.
 const KEY = 'travel-app-v1';
-let db = JSON.parse(localStorage.getItem(KEY) || 'null') || {places:[], attractions:[], airports:[], notes:[]};
-const save = () => { localStorage.setItem(KEY, JSON.stringify(db)); renderAll(); };
+const EMPTY = () => ({places:[], attractions:[], airports:[], notes:[], updated:0});
+const count = d => d ? (d.places?.length || 0) + (d.attractions?.length || 0) + (d.airports?.length || 0) + (d.notes?.length || 0) : 0;
+function readLS() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; } }
+let db = {...EMPTY(), ...(readLS() || {})};
+
+const idb = new Promise((res, rej) => {
+  const r = indexedDB.open('taxidia', 1);
+  r.onupgradeneeded = () => r.result.createObjectStore('kv');
+  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+});
+async function idbGet(k) { const d = await idb; return new Promise(res => {
+  const q = d.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(null); }); }
+async function idbSet(k, v) { const d = await idb; return new Promise(res => {
+  const t = d.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = () => res(true); t.onerror = () => res(false); }); }
+async function idbSnapshot() {   // ένα αντίγραφο ανά ημέρα, κρατάμε τα τελευταία 30
+  const d = await idb, store = d.transaction('kv', 'readwrite').objectStore('kv');
+  store.put(JSON.parse(JSON.stringify(db)), 'snap-' + new Date().toISOString().slice(0, 10));
+  const q = store.getAllKeys();
+  q.onsuccess = () => q.result.filter(k => String(k).startsWith('snap-')).sort().slice(0, -30).forEach(k => store.delete(k));
+}
+function persist() {
+  try { localStorage.setItem(KEY, JSON.stringify(db)); } catch {}
+  idbSet('db', JSON.parse(JSON.stringify(db))).catch(() => {});
+  idbSnapshot().catch(() => {});
+}
+const save = () => { db.updated = Date.now(); persist(); renderAll(); };
 const uid = () => Math.random().toString(36).slice(2, 10);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const regionName = new Intl.DisplayNames(['el'], {type:'region'});
@@ -449,6 +481,7 @@ exp.onclick = () => {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(db, null, 2)], {type:'application/json'}));
   a.download = `taxidia-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+  db.lastBackup = Date.now(); persist(); renderBanners();
 };
 imp.onchange = async () => {
   try {
@@ -619,10 +652,52 @@ function renderAll() {
 renderAll();
 fitAll();
 
+// ---------- Ασφάλεια δεδομένων ----------
+function toast(msg) {
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+  document.body.appendChild(t); setTimeout(() => t.remove(), 4000);
+}
+// Κατά την εκκίνηση: αν το localStorage χάθηκε ή είναι παλαιότερο, ανάκτηση από IndexedDB
+(async () => {
+  try {
+    const saved = await idbGet('db');
+    if (saved && count(saved) && ((saved.updated || 0) > (db.updated || 0) || !count(db))) {
+      db = {...EMPTY(), ...saved};
+      try { localStorage.setItem(KEY, JSON.stringify(db)); } catch {}
+      renderAll(); fitAll(); toast('✅ Τα δεδομένα σου ανακτήθηκαν');
+    } else if (count(db)) persist();
+  } catch {}
+})();
+
+const IN_APP = /FBAN|FBAV|FB_IAB|Instagram|Viber|Line\/|; wv\)|GSA\//i.test(navigator.userAgent);
+const IS_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+const STANDALONE = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+function renderBanners() {
+  const out = [];
+  if (IN_APP) out.push(`<div class="banner warn">⚠️ <b>Άνοιξες την εφαρμογή μέσα από άλλη εφαρμογή</b> (π.χ. Viber, Messenger). Εδώ τα δεδομένα μπορεί να χαθούν.
+    Άνοιξέ την στο <b>${IS_IOS ? 'Safari' : 'Chrome'}</b>: πάτα ⋮ ή ••• → «Άνοιγμα στο πρόγραμμα περιήγησης».</div>`);
+  else if (IS_IOS && !STANDALONE && !localStorage.getItem('dismiss-ios'))
+    out.push(`<div class="banner">📱 Στο iPhone, <b>πρόσθεσε την εφαρμογή στην οθόνη Αφετηρίας</b> (⬆️ → «Προσθήκη στην οθόνη Αφετηρίας»). Το Safari μπορεί να σβήσει τα δεδομένα σελίδων που δεν ανοίγεις για 7 μέρες.
+      Προσοχή: η εφαρμογή της οθόνης Αφετηρίας έχει <b>ξεχωριστά</b> δεδομένα από το Safari, μετάφερέ τα με «Αντίγραφο ασφαλείας» → «Επαναφορά».
+      <button class="x" style="color:var(--muted)" onclick="localStorage.setItem('dismiss-ios',1);renderBanners()">✕</button></div>`);
+  const DAY = 864e5;
+  if (count(db) >= 3 && (db.updated || 0) > (db.lastBackup || 0) && Date.now() - (db.lastBackup || 0) > 14 * DAY
+      && Date.now() - (+localStorage.getItem('snooze-backup') || 0) > 3 * DAY)
+    out.push(`<div class="banner">💾 Έχεις αλλαγές χωρίς αντίγραφο ασφαλείας. Κράτα ένα αρχείο (π.χ. στο Google Drive) για να μη χαθεί τίποτα αν αλλάξεις κινητό.
+      <div style="margin-top:8px;display:flex;gap:8px"><button class="btn small" onclick="exp.click()">⬇️ Αντίγραφο τώρα</button>
+      <button class="btn sec small" onclick="localStorage.setItem('snooze-backup',Date.now());renderBanners()">Αργότερα</button></div></div>`);
+  banners.innerHTML = out.join('');
+}
+renderBanners();
+
 // ---------- Εγκατάσταση στο κινητό ----------
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 // Ζητάμε από τον browser να μη σβήσει ποτέ τα δεδομένα αυτόματα
-if (navigator.storage?.persist) navigator.storage.persist();
+(async () => {
+  let ok = false;
+  try { ok = await navigator.storage?.persisted?.() || await navigator.storage?.persist?.(); } catch {}
+  storeState.textContent = ok ? '🔒 Μόνιμη αποθήκευση ενεργή' : '💾 Τα δεδομένα αποθηκεύονται στη συσκευή';
+})();
 </script>
 </body>
 </html>
