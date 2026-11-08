@@ -28,6 +28,9 @@
   section{display:none} section.active{display:block}
   #map{height:62vh;border-radius:16px;box-shadow:0 6px 24px #0e7c8626,0 1px 3px #0002;background:#d9eef2}
   .leaflet-container{font-family:inherit}
+  /* Ο χάρτης μένει "μέσα" στο κουτί του: τα στοιχεία του δεν περνούν πάνω από τα μενού */
+  #map{position:relative;z-index:0;isolation:isolate}
+  .leaflet-control-attribution{font-size:9px!important;background:#ffffffb3!important;border-radius:6px 0 0 0;max-width:70%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .pin{background:none;border:0;filter:drop-shadow(0 2px 2px #0005);transition:transform .15s}
   .pin:hover{transform:scale(1.15)}
   .plane{background:#fff;border-radius:50%;box-shadow:0 1px 4px #0004;display:flex;align-items:center;justify-content:center;font-size:14px}
@@ -90,7 +93,7 @@
     nav button .t{font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
     nav button.active{background:#e6f4f5;color:var(--accent)}
     main{padding:12px 10px calc(84px + env(safe-area-inset-bottom))}
-    #map{height:calc(100vh - 250px);min-height:300px;border-radius:14px}
+    #map{height:calc(100vh - 250px);height:calc(100dvh - 250px - env(safe-area-inset-bottom));min-height:300px;border-radius:14px}
     .hbtn{padding:5px 11px;font-size:13px}
     .mapchip .bar{width:110px}
     input[type=text],textarea{font-size:16px}
