@@ -675,7 +675,13 @@ const STANDALONE = matchMedia('(display-mode: standalone)').matches || navigator
 function renderBanners() {
   const out = [];
   if (IN_APP) out.push(`<div class="banner warn">⚠️ <b>Άνοιξες την εφαρμογή μέσα από άλλη εφαρμογή</b> (π.χ. Viber, Messenger). Εδώ τα δεδομένα μπορεί να χαθούν.
-    Άνοιξέ την στο <b>${IS_IOS ? 'Safari' : 'Chrome'}</b>: πάτα ⋮ ή ••• → «Άνοιγμα στο πρόγραμμα περιήγησης».</div>`);
+    Άνοιξέ την στο <b>${IS_IOS ? 'Safari' : 'Chrome'}</b>: πάτα ⋮ ή ••• → «Άνοιγμα στο πρόγραμμα περιήγησης».
+    ${count(db) ? '<br><b>Έχεις ήδη δεδομένα εδώ:</b> πάτα πρώτα «Αντίγραφο ασφαλείας», και μετά «Επαναφορά» με το αρχείο στον κανονικό browser.' : ''}
+    <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:8px">
+      ${IS_IOS ? '' : `<a class="btn small" style="text-decoration:none" href="intent://${location.host}${location.pathname}#Intent;scheme=https;package=com.android.chrome;end">🌐 Άνοιγμα στο Chrome</a>`}
+      ${count(db) ? '<button class="btn sec small" onclick="exp.click()">⬇️ Αντίγραφο ασφαλείας</button>' : ''}
+      <button class="btn sec small" onclick="navigator.clipboard.writeText(APP_URL).then(()=>toast('📋 Ο σύνδεσμος αντιγράφηκε — επικόλλησέ τον στον browser'))">📋 Αντιγραφή συνδέσμου</button>
+    </div></div>`);
   else if (IS_IOS && !STANDALONE && !localStorage.getItem('dismiss-ios'))
     out.push(`<div class="banner">📱 Στο iPhone, <b>πρόσθεσε την εφαρμογή στην οθόνη Αφετηρίας</b> (⬆️ → «Προσθήκη στην οθόνη Αφετηρίας»). Το Safari μπορεί να σβήσει τα δεδομένα σελίδων που δεν ανοίγεις για 7 μέρες.
       Προσοχή: η εφαρμογή της οθόνης Αφετηρίας έχει <b>ξεχωριστά</b> δεδομένα από το Safari, μετάφερέ τα με «Αντίγραφο ασφαλείας» → «Επαναφορά».
